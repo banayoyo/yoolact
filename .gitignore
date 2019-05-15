@@ -1,3 +1,4 @@
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -120,9 +121,7 @@ test_data_aug.py
 # pycharm
 .idea/
 
-# temp checkout soln
-data/datasets/
-data/ssd_dataloader.py
+
 
 # pylint
 .pylintrc
@@ -131,22 +130,9 @@ data/ssd_dataloader.py
 ssd.pytorch/
 
 # some datasets
-data/VOCdevkit/
-data/coco/images/
-data/coco/annotations/
-ap_data.pkl
-results/
-logs/
-scripts/aws/
-scripts/gt.npy
-scripts/proto.npy
-scripts/info.txt
-test.pkl
-testeval.py
-scripts/aws2/
-status.sh
-train.sh
-img/
-scripts/aws-ohio/
-scripts/aws3/
-data/config_dev.py
+data/train2014/
+data/val2014/
+data/annotations_trainval2014/
+
+# result
+/result
