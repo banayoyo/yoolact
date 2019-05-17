@@ -1,5 +1,7 @@
 copy from: https://github.com/dbolya/yolact
 
+Format:550x550, Resnet101-FPN
+
 # **Y**ou **O**nly **L**ook **A**t **C**oefficien**T**s
 ```
     ██╗   ██╗ ██████╗ ██╗      █████╗  ██████╗████████╗
@@ -88,6 +90,7 @@ python eval.py --trained_model=weights/yolact_base_54_800000.pth --score_thresho
 
 # Process an image and save it to another file.
 python eval.py --trained_model=weights/yolact_base_54_800000.pth --score_threshold=0.3 --top_k=100 --image=input_image.png:output_image.png
+debugfile('C:/Users/admin/Desktop/Git_Repo/TF/yoolact/eval.py', args='--trained_model=../data_file/yolact_weights/yolact_base_54_800000.pth --score_threshold=0.3 --top_k=100 --image=input_image.png:output_image.png', wdir='C:/Users/admin/Desktop/Git_Repo/TF/yoolact')
 
 # Process a whole folder of images.
 python eval.py --trained_model=weights/yolact_base_54_800000.pth --score_threshold=0.3 --top_k=100 --images=path/to/input/folder:path/to/output/folder

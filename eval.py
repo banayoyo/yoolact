@@ -140,7 +140,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         t = postprocess(dets_out, w, h, visualize_lincomb = args.display_lincomb,
                                         crop_masks        = args.crop,
                                         score_threshold   = args.score_threshold)
-        torch.cuda.synchronize()
+        #torch.cuda.synchronize()
 
     with timer.env('Copy'):
         if cfg.eval_mask_branch:
@@ -183,8 +183,16 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         # After this, mask is of size [num_dets, h, w, 1]
         masks = masks[:num_dets_to_consider, :, :, None]
         
+#        ccc = torch.tensor(np.reshape(get_color(0, on_gpu=img.device.index),(1,1,1,3)))
+#        for ii in range(1,3):
+#            aaa = torch.tensor(np.reshape(get_color(ii, on_gpu=img.device.index),(1,1,1,3)))
+##        bbb = torch.tensor(np.reshape(get_color(1, on_gpu=img.device.index),(1,1,1,3)))
+#            ccc = torch.cat([ccc,aaa],dim=0)
+        
         # Prepare the RGB images for each mask given their color (size [num_dets, h, w, 1])
-        colors = torch.cat([get_color(j, on_gpu=img.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
+        colors1 = torch.cat([torch.tensor(np.reshape(get_color(j, on_gpu=img.device.index),(1, 1, 1, 3))) for j in range(num_dets_to_consider)], dim=0)
+
+        colors = colors1.float()
         masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
 
         # This is 1 everywhere except for 1-mask_alpha where the mask is
@@ -239,9 +247,9 @@ def prep_benchmark(dets_out, h, w):
     with timer.env('Copy'):
         classes, scores, boxes, masks = [x[:args.top_k].cpu().numpy() for x in t]
     
-    with timer.env('Sync'):
+    #with timer.env('Sync'):
         # Just in case
-        torch.cuda.synchronize()
+        #torch.cuda.synchronize()
 
 def prep_coco_cats():
     """ Prepare inverted table for category id lookup given a coco cats object. """
@@ -558,7 +566,7 @@ def badhash(x):
     return x
 
 def evalimage(net:Yolact, path:str, save_path:str=None):
-    frame = torch.from_numpy(cv2.imread(path)).cuda().float()
+    frame = torch.from_numpy(cv2.imread(path)).cpu().float()
     batch = FastBaseTransform()(frame.unsqueeze(0))
     preds = net(batch)
 
@@ -969,11 +977,11 @@ if __name__ == '__main__':
         net = Yolact()
         net.load_weights(args.trained_model)
         net.eval()
-        print(' Done.')
+        print('\nnet Done.')
 
         if args.cuda:
             net = net.cuda()
 
         evaluate(net, dataset)
-
+        print('\nYolact Done.')
 
