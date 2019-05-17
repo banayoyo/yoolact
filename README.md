@@ -1,6 +1,6 @@
 copy from: https://github.com/dbolya/yolact
 
-Format:550x550, Resnet101-FPN
+Format:550x550, Resnet101-FPN, Date:2019:05:15
 
 # **Y**ou **O**nly **L**ook **A**t **C**oefficien**T**s
 ```
