@@ -39,13 +39,14 @@ class Concat(nn.Module):
         return torch.cat([net(x) for net in self.nets], dim=1, **self.extra_params)
 
 
-
+#make_net is decorate
 def make_net(in_channels, conf, include_last_relu=True):
     """
     A helper function to take a config setting and turn it into a network.
     Used by protonet and extrahead. Returns (network, out_channels)
     """
     def make_layer(layer_cfg):
+    #nonlocal to clarify a local_area parameter that share with up-layer 
         nonlocal in_channels
         
         # Possible patterns:
@@ -60,6 +61,8 @@ def make_net(in_channels, conf, include_last_relu=True):
             layer_name = layer_cfg[0]
 
             if layer_name == 'cat':
+            #seems no called
+                print("make_net =",layer_cfg[1],"\n")
                 nets = [make_net(in_channels, x) for x in layer_cfg[1]]
                 layer = Concat([net[0] for net in nets], layer_cfg[2])
                 num_channels = sum([net[1] for net in nets])
@@ -68,6 +71,9 @@ def make_net(in_channels, conf, include_last_relu=True):
             kernel_size = layer_cfg[1]
 
             if kernel_size > 0:
+                # *args 与 **kwargs 的区别，两者都是 python 中的可变参数：
+                #*args 表示任何多个无名参数，它本质是一个 tuple
+                #**kwargs 表示关键字参数，它本质上是一个 dict
                 layer = nn.Conv2d(in_channels, num_channels, kernel_size, **layer_cfg[2])
             else:
                 if num_channels is None:
@@ -85,11 +91,14 @@ def make_net(in_channels, conf, include_last_relu=True):
         # else:
         return [layer, nn.ReLU(inplace=True)]
 
+
     # Use sum to concat together all the component layer lists
     net = sum([make_layer(x) for x in conf], [])
     if not include_last_relu:
         net = net[:-1]
 
+
+    #Sequential use order-dict to build a net, using layer
     return nn.Sequential(*(net)), in_channels
 
 
@@ -138,6 +147,7 @@ class PredictionModule(nn.Module):
                 self.upfeature, out_channels = make_net(in_channels, cfg.extra_head_net)
 
             if cfg.use_prediction_module:
+                #// is floor(A/B)
                 self.block = Bottleneck(out_channels, out_channels // 4)
                 self.conv = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=True)
                 self.bn = nn.BatchNorm2d(out_channels)
@@ -254,7 +264,7 @@ class PredictionModule(nn.Module):
                     # +0.5 because priors are in center-size notation
                     x = (i + 0.5) / conv_w
                     y = (j + 0.5) / conv_h
-                    
+                    #zip函数接受任意多个（包括0个和1个）序列作为参数，返回一个tuple列表。
                     for scale, ars in zip(self.scales, self.aspect_ratios):
                         for ar in ars:
                             if not cfg.backbone.preapply_sqrt:
@@ -269,7 +279,7 @@ class PredictionModule(nn.Module):
                                 h = scale / ar / conv_h
 
                             prior_data += [x, y, w, h]
-                
+                #reshape函数调用是不依赖于tensor在内存中是不是连续的, view need contiguous
                 self.priors = torch.Tensor(prior_data).view(-1, 4)
                 self.last_conv_size = (conv_w, conv_h)
         
@@ -385,7 +395,9 @@ class Yolact(nn.Module):
     """
 
     def __init__(self):
+    #call the based-class' init func
         super().__init__()
+        print('net initial...')
 
         self.backbone = construct_backbone(cfg.backbone)
 
@@ -397,14 +409,17 @@ class Yolact(nn.Module):
             cfg.mask_dim = cfg.mask_size**2
         elif cfg.mask_type == mask_type.lincomb:
             if cfg.mask_proto_use_grid:
+            #cfg.mask_proto_grid_file : data/grid.npy , npy is a numpy data file
                 self.grid = torch.Tensor(np.load(cfg.mask_proto_grid_file))
                 self.num_grids = self.grid.size(0)
             else:
                 self.num_grids = 0
 
+            #0
             self.proto_src = cfg.mask_proto_src
-            
+
             if self.proto_src is None: in_channels = 3
+            #cfg.fpn is obj
             elif cfg.fpn is not None: in_channels = cfg.fpn.num_features
             else: in_channels = self.backbone.channels[self.proto_src]
             in_channels += self.num_grids
@@ -425,7 +440,6 @@ class Yolact(nn.Module):
             self.selected_layers = list(range(len(self.selected_layers) + cfg.fpn.num_downsample))
             src_channels = [cfg.fpn.num_features] * len(self.selected_layers)
 
-
         self.prediction_layers = nn.ModuleList()
 
         for idx, layer_idx in enumerate(self.selected_layers):
@@ -434,10 +448,12 @@ class Yolact(nn.Module):
             if cfg.share_prediction_module and idx > 0:
                 parent = self.prediction_layers[0]
 
-            pred = PredictionModule(src_channels[layer_idx], src_channels[layer_idx],
-                                    aspect_ratios = cfg.backbone.pred_aspect_ratios[idx],
-                                    scales        = cfg.backbone.pred_scales[idx],
-                                    parent        = parent)
+            pred = PredictionModule(src_channels[layer_idx], 
+                                src_channels[layer_idx],
+                                aspect_ratios = cfg.backbone.pred_aspect_ratios[idx],
+                                scales        = cfg.backbone.pred_scales[idx],
+                                parent        = parent)
+                                
             self.prediction_layers.append(pred)
 
         # Extra parameters for the extra losses
@@ -450,7 +466,7 @@ class Yolact(nn.Module):
             self.semantic_seg_conv = nn.Conv2d(src_channels[0], cfg.num_classes-1, kernel_size=1)
 
         # For use in evaluation
-        self.detect = Detect(cfg.num_classes, bkg_label=0, top_k=200, conf_thresh=0.05, nms_thresh=0.5)
+        self.detect = Detect(cfg.num_classes, bkg_label=0, top_k=200, conf_thresh=0.2, nms_thresh=0.5)
 
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
@@ -512,6 +528,7 @@ class Yolact(nn.Module):
     def freeze_bn(self):
         """ Adapted from https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8 """
         for module in self.modules():
+        #isinstance to judge the 2 para are the same types
             if isinstance(module, nn.BatchNorm2d):
                 module.eval()
 

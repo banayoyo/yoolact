@@ -927,45 +927,46 @@ def print_maps(all_maps):
 
 if __name__ == '__main__':
     parse_args()
-
+#false
     if args.config is not None:
         set_cfg(args.config)
-
+#two false
     if args.trained_model == 'interrupt':
         args.trained_model = SavePath.get_interrupt('weights/')
     elif args.trained_model == 'latest':
         args.trained_model = SavePath.get_latest('weights/', cfg.name)
 
+#ok
     if args.config is None:
         model_path = SavePath.from_str(args.trained_model)
         # TODO: Bad practice? Probably want to do a name lookup instead.
         args.config = model_path.model_name + '_config'
         print('Config not specified. Parsed %s from the file name.\n' % args.config)
         set_cfg(args.config)
-
+#false
     if args.detect:
         cfg.eval_mask_branch = False
-
+#false
     if args.dataset is not None:
         set_dataset(args.dataset)
 
     with torch.no_grad():
-        if not os.path.exists('results'):
+        if not os.path.exists('results'):    #false
             os.makedirs('results')
-
+#false
         if args.cuda:
             cudnn.benchmark = True
             cudnn.fastest = True
             torch.set_default_tensor_type('torch.cuda.FloatTensor')
         else:
             torch.set_default_tensor_type('torch.FloatTensor')
-
+#false
         if args.resume and not args.display:
             with open(args.ap_data_file, 'rb') as f:
                 ap_data = pickle.load(f)
             calc_map(ap_data)
             exit()
-
+#false
         if args.image is None and args.video is None and args.images is None:
             dataset = COCODetection(cfg.dataset.valid_images, cfg.dataset.valid_info,
                                     transform=BaseTransform(), has_gt=cfg.dataset.has_gt)
@@ -973,6 +974,9 @@ if __name__ == '__main__':
         else:
             dataset = None        
 
+
+
+########## key process
         print('Loading model...', end='')
         net = Yolact()
         net.load_weights(args.trained_model)

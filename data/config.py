@@ -58,6 +58,7 @@ COCO_LABEL_MAP = { 1:  1,  2:  2,  3:  3,  4:  4,  5:  5,  6:  6,  7:  7,  8:  8
 
 # ----------------------- CONFIG CLASS ----------------------- #
 
+####config is a dict
 class Config(object):
     """
     Holds the configuration for anything you want it to.
@@ -664,7 +665,7 @@ yolact_resnet50_config = yolact_base_config.copy({
 
 
 
-# Default config
+# Default config, in config.py
 cfg = yolact_base_config.copy()
 
 def set_cfg(config_name:str):

@@ -434,6 +434,9 @@ class VGGBackbone(nn.Module):
 
 def construct_backbone(cfg):
     """ Constructs a backbone given a backbone config object (see config.py). """
+    #cfg.args is one parameter of the backbone
+    #about the *: https://blog.csdn.net/yhs_cy/article/details/79438706
+    #'type': ResNetBackbone, not function type
     backbone = cfg.type(*cfg.args)
 
     # Add downsampling layers until we reach the number we need
