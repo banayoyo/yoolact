@@ -4,6 +4,7 @@ from utils import timer
 
 from data import cfg
 
+#@torch.jit.script is used for pytorch inside optimization
 @torch.jit.script
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
@@ -48,6 +49,7 @@ def intersect(box_a, box_b):
                        box_b[:, :, 2:].unsqueeze(1).expand(n, A, B, 2))
     min_xy = torch.max(box_a[:, :, :2].unsqueeze(2).expand(n, A, B, 2),
                        box_b[:, :, :2].unsqueeze(1).expand(n, A, B, 2))
+    #clamp mean truncation into (min=0,max)
     inter = torch.clamp((max_xy - min_xy), min=0)
     return inter[:, :, :, 0] * inter[:, :, :, 1]
 
@@ -78,6 +80,7 @@ def jaccard(box_a, box_b, iscrowd:bool=False):
     union = area_a + area_b - inter
 
     out = inter / area_a if iscrowd else inter / union
+    #squeeze means remove those dim whose shape=1
     return out if use_batch else out.squeeze(0)
 
 
@@ -285,13 +288,14 @@ def sanitize_coordinates(_x1, _x2, img_size:int, padding:int=0, cast:bool=True):
         _x2 = _x2.long()
     x1 = torch.min(_x1, _x2)
     x2 = torch.max(_x1, _x2)
+    #truncation
     x1 = torch.clamp(x1-padding, min=0)
     x2 = torch.clamp(x2+padding, max=img_size)
 
     return x1, x2
 
 
-@torch.jit.script
+#@torch.jit.script
 def crop(masks, boxes, padding:int=1):
     """
     "Crop" predicted masks by zeroing out everything not in the predicted bbox.
@@ -301,20 +305,74 @@ def crop(masks, boxes, padding:int=1):
         - masks should be a size [h, w, n] tensor of masks
         - boxes should be a size [n, 4] tensor of bbox coords in relative point form
     """
-    h, w, n = masks.size()
-    x1, x2 = sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, padding, cast=False)
-    y1, y2 = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, padding, cast=False)
+    hh, ww, nn = masks.size()
+    #re-mapping to hh/ww
+    x1, x2 = sanitize_coordinates(boxes[:, 0], boxes[:, 2], ww, padding, cast=False)
+    y1, y2 = sanitize_coordinates(boxes[:, 1], boxes[:, 3], hh, padding, cast=False)
 
-    rows = torch.arange(w, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(h, w, n)
-    cols = torch.arange(h, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(h, w, n)
+    #rowa/clos some like those on yolo-v3
+    #ipdb> rows
+    #tensor([[[  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         ...,
+    #         [135., 135., 135.,  ..., 135., 135., 135.],
+    #         [136., 136., 136.,  ..., 136., 136., 136.],
+    #         [137., 137., 137.,  ..., 137., 137., 137.]],
+    #
+    #        [[  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         ...,
+    #         [135., 135., 135.,  ..., 135., 135., 135.],
+    #         [136., 136., 136.,  ..., 136., 136., 136.],
+    #         [137., 137., 137.,  ..., 137., 137., 137.]],
+    #
+    #        [[  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         ...,
+    #         [135., 135., 135.,  ..., 135., 135., 135.],
+    #         [136., 136., 136.,  ..., 136., 136., 136.],
+    #         [137., 137., 137.,  ..., 137., 137., 137.]],
+    #...
+    #ipdb> cols
+    #tensor([[[  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         ...,
+    #         [  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  0.,   0.,   0.,  ...,   0.,   0.,   0.],
+    #         [  0.,   0.,   0.,  ...,   0.,   0.,   0.]],
+    #
+    #        [[  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         ...,
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.],
+    #         [  1.,   1.,   1.,  ...,   1.,   1.,   1.]],
+    #
+    #        [[  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         [  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         [  2.,   2.,   2.,  ...,   2.,   2.,   2.],
+    #         ...,
+    rows = torch.arange(ww, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(hh, ww, nn)
+    cols = torch.arange(hh, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(hh, ww, nn)
     
+    #0/1
+    #ipdb> masks_left.shape
+    #torch.Size([138, 138, 16])
     masks_left  = rows >= x1.view(1, 1, -1)
     masks_right = rows <  x2.view(1, 1, -1)
     masks_up    = cols >= y1.view(1, 1, -1)
     masks_down  = cols <  y2.view(1, 1, -1)
     
+    #ipdb> crop_mask.shape
+    #torch.Size([138, 138, 16])
+    # * = mul, means dot-multiply; and mm is X-multiply
     crop_mask = masks_left * masks_right * masks_up * masks_down
-    
+    aaa = masks * crop_mask.float()
     return masks * crop_mask.float()
 
 

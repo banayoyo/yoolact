@@ -395,15 +395,17 @@ class Yolact(nn.Module):
     """
 
     def __init__(self):
-    #call the based-class' init func
+        #super:;call the based-class' init func
         super().__init__()
-        print('net initial...')
+        print('net initial...\n')
 
         self.backbone = construct_backbone(cfg.backbone)
 
         if cfg.freeze_bn:
             self.freeze_bn()
 
+
+        ##get:: self.proto_net, cfg.mask_dim
         # Compute mask_dim here and add it back to the config. Make sure Yolact's constructor is called early!
         if cfg.mask_type == mask_type.direct:
             cfg.mask_dim = cfg.mask_size**2
@@ -430,6 +432,38 @@ class Yolact(nn.Module):
             if cfg.mask_proto_bias:
                 cfg.mask_dim += 1
 
+        #        self.proto_net
+        #        Sequential(
+        #          (0): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        #          (1): ReLU(inplace)
+        #          (2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        #          (3): ReLU(inplace)
+        #          (4): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        #          (5): ReLU(inplace)
+        #          (6): InterpolateModule()
+        #          (7): ReLU(inplace)
+        #          (8): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        #          (9): ReLU(inplace)
+        #          (10): Conv2d(256, 32, kernel_size=(1, 1), stride=(1, 1))
+        #)
+        #
+        #        self.fpn
+        #        FPN(
+        #          (lat_layers): _ConstModuleList(
+        #            (0): WeakScriptModuleProxy()
+        #            (1): WeakScriptModuleProxy()
+        #            (2): WeakScriptModuleProxy()
+        #          )
+        #          (pred_layers): _ConstModuleList(
+        #            (0): WeakScriptModuleProxy()
+        #            (1): WeakScriptModuleProxy()
+        #            (2): WeakScriptModuleProxy()
+        #          )
+        #          (downsample_layers): _ConstModuleList(
+        #            (0): WeakScriptModuleProxy()
+        #            (1): WeakScriptModuleProxy()
+        #          )
+        #        )
 
         self.selected_layers = cfg.backbone.selected_layers
         src_channels = self.backbone.channels
@@ -456,6 +490,7 @@ class Yolact(nn.Module):
                                 
             self.prediction_layers.append(pred)
 
+        #False
         # Extra parameters for the extra losses
         if cfg.use_class_existence_loss:
             # This comes from the smallest layer selected
@@ -467,6 +502,7 @@ class Yolact(nn.Module):
 
         # For use in evaluation
         self.detect = Detect(cfg.num_classes, bkg_label=0, top_k=200, conf_thresh=0.2, nms_thresh=0.5)
+        self.tmp = 1
 
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
@@ -540,6 +576,7 @@ class Yolact(nn.Module):
         with timer.env('backbone'):
             outs = self.backbone(x)
 
+        #extract the FPN selected_layer from backbone
         if cfg.fpn is not None:
             with timer.env('fpn'):
                 # Use backbone.selected_layers because we overwrote self.selected_layers
@@ -551,21 +588,25 @@ class Yolact(nn.Module):
             with timer.env('proto'):
                 proto_x = x if self.proto_src is None else outs[self.proto_src]
                 
+                #self.num_grids = 0
                 if self.num_grids > 0:
                     grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
                     proto_x = torch.cat([proto_x, grids], dim=1)
 
                 proto_out = self.proto_net(proto_x)
+                #activation func: relu
                 proto_out = cfg.mask_proto_prototype_activation(proto_out)
 
                 if cfg.mask_proto_prototypes_as_features:
                     # Clone here because we don't want to permute this, though idk if contiguous makes this unnecessary
+                    #.clone means '=', but the back-broadcast is copied also, then need detach bellowing to cut back-broadcast
                     proto_downsampled = proto_out.clone()
 
                     if cfg.mask_proto_prototypes_as_features_no_grad:
                         proto_downsampled = proto_out.detach()
                 
                 # Move the features last so the multiplication is easy
+                #permute is used to exchange the dimesion order
                 proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
                 if cfg.mask_proto_bias:
@@ -576,7 +617,7 @@ class Yolact(nn.Module):
 
         with timer.env('pred_heads'):
             pred_outs = { 'loc': [], 'conf': [], 'mask': [], 'priors': [] }
-
+            #False
             if cfg.use_instance_coeff:
                 pred_outs['inst'] = []
             
@@ -602,9 +643,9 @@ class Yolact(nn.Module):
 
         if proto_out is not None:
             pred_outs['proto'] = proto_out
-
+        #dict_keys(['loc', 'conf', 'mask', 'priors', 'proto'])
+        
         if self.training:
-
             # For the extra loss functions
             if cfg.use_class_existence_loss:
                 pred_outs['classes'] = self.class_existence_fc(outs[-1].mean(dim=(2, 3)))
@@ -622,9 +663,27 @@ class Yolact(nn.Module):
                 objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
                 pred_outs['conf'][:, :, 1:] = objectness[:, :, None] * F.softmax(pred_outs['conf'][:, :, 1:], -1)
                 pred_outs['conf'][:, :, 0 ] = 1 - objectness
+            #True
             else:
                 pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
 
+            #ipdb> pred_outs.keys()
+            #dict_keys(['loc', 'conf', 'mask', 'priors', 'proto'])
+            #ipdb> pred_outs['loc'].shape
+            #torch.Size([1, 19248, 4])
+            #
+            #ipdb> pred_outs['conf'].shape
+            #torch.Size([1, 19248, 81])
+            #
+            #ipdb> pred_outs['mask'].shape
+            #torch.Size([1, 19248, 32])
+            #
+            #ipdb> pred_outs['priors'].shape
+            #torch.Size([19248, 4])
+            #
+            #ipdb> pred_outs['proto'].shape
+            #torch.Size([1, 138, 138, 32])
+            #19248=401*48
             return self.detect(pred_outs)
 
 

@@ -1,17 +1,13 @@
 import torch
 import torch.nn.functional as F
-from ..box_utils import decode, jaccard, index2d
+import numpy as np
+from layers.box_utils import decode, jaccard, index2d
 from utils import timer
-
+from utils.cython_nms import nms as cnms
 from data import cfg, mask_type
 
-import numpy as np
-
-import pyximport
-pyximport.install(setup_args={"include_dirs":np.get_include()}, reload_support=True)
-
-from utils.cython_nms import nms as cnms
-
+#import pyximport
+#pyximport.install(setup_args={"include_dirs":np.get_include()}, reload_support=True)
 
 class Detect(object):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
@@ -34,6 +30,7 @@ class Detect(object):
         self.cross_class_nms = False
         self.use_fast_nms = False
 
+    #this means the instance of the class can be called as func
     def __call__(self, predictions):
         """
         Args:
@@ -59,8 +56,8 @@ class Detect(object):
         conf_data  = predictions['conf']
         mask_data  = predictions['mask']
         prior_data = predictions['priors']
-
         proto_data = predictions['proto'] if 'proto' in predictions else None
+        
         inst_data  = predictions['inst']  if 'inst'  in predictions else None
 
         out = []
@@ -69,6 +66,7 @@ class Detect(object):
             batch_size = loc_data.size(0)
             num_priors = prior_data.size(0)
 
+            #view-->resize
             conf_preds = conf_data.view(batch_size, num_priors, self.num_classes).transpose(2, 1).contiguous()
 
             for batch_idx in range(batch_size):
@@ -78,13 +76,29 @@ class Detect(object):
                 if result is not None and proto_data is not None:
                     result['proto'] = proto_data[batch_idx]
                 
+                #ipdb> result.keys()
+                #dict_keys(['box', 'mask', 'class', 'score', 'proto'])
+                #
+                #ipdb> result['box'].shape
+                #torch.Size([100, 4])
+                #
+                #ipdb> result['mask'].shape
+                #torch.Size([100, 32])
+                #
+                #ipdb> result['class'].shape
+                #torch.Size([100])
+                #
+                #ipdb> result['score'].shape
+                #torch.Size([100])
+                #
+                #ipdb> result['proto'].shape
+                #torch.Size([138, 138, 32])
                 out.append(result)
         
         return out
 
-
+    """ Perform nms for only the max scoring class that isn't background (class 0) """
     def detect(self, batch_idx, conf_preds, decoded_boxes, mask_data, inst_data):
-        """ Perform nms for only the max scoring class that isn't background (class 0) """
         cur_scores = conf_preds[batch_idx, 1:, :]
         conf_scores, _ = torch.max(cur_scores, dim=0)
 
@@ -133,19 +147,23 @@ class Detect(object):
         
         return idx_out, idx_out.size(0)
 
+    #https://blog.csdn.net/sinat_37532065/article/details/89415374
     def fast_nms(self, boxes, masks, scores, iou_threshold:float=0.5, top_k:int=200, second_threshold:bool=False):
+        #sorted with the 1th dim
         scores, idx = scores.sort(1, descending=True)
 
         idx = idx[:, :top_k].contiguous()
         scores = scores[:, :top_k]
-    
+        #80
         num_classes, num_dets = idx.size()
 
         boxes = boxes[idx.view(-1), :].view(num_classes, num_dets, 4)
         masks = masks[idx.view(-1), :].view(num_classes, num_dets, -1)
 
         iou = jaccard(boxes, boxes)
+        #iou 80 x top_k x top_k
         iou.triu_(diagonal=1)
+        #https://blog.csdn.net/Z_lbj/article/details/79766690
         iou_max, _ = iou.max(dim=1)
 
         # Now just filter out the ones higher than the threshold
@@ -156,12 +174,17 @@ class Detect(object):
         # have such a minimal amount of computation per detection (matrix mulitplication only),
         # this increase doesn't affect us much (+0.2 mAP for 34 -> 33 fps), so we leave it out.
         # However, when you implement this in your method, you should do this second threshold.
+        # TODO:: above
         if second_threshold:
             keep *= (scores > self.conf_thresh)
 
         # Assign each kept detection to its corresponding class
-        classes = torch.arange(num_classes, device=boxes.device)[:, None].expand_as(keep)
-        classes = classes[keep]
+        #https://blog.csdn.net/m0_37586991/article/details/88830026
+        classes_t = torch.arange(num_classes, device=boxes.device)[:, None].expand_as(keep)
+        #tensor([[ 0,  0,  0,  ...,  0,  0,  0],
+        #        [ 1,  1,  1,  ...,  1,  1,  1],
+        #        [ 2,  2,  2,  ...,  2,  2,  2],
+        classes = classes_t[keep]
 
         boxes = boxes[keep]
         masks = masks[keep]

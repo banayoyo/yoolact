@@ -8,7 +8,7 @@
 # Written by Ross Girshick
 # --------------------------------------------------------
 
-import cython
+#import cython
 import numpy as np
 
 def max(a, b):
@@ -31,39 +31,38 @@ def nms(dets, thresh):
     suppressed = np.zeros((ndets), dtype=np.int)
 
     # nominal indices
-    _i, _j
+    #ii, jj
     # sorted indices
-    i, j
+    #i, j
     # temp variables for box i's (the box currently under consideration)
-    ix1, iy1, ix2, iy2, iarea
+    #ix1, iy1, ix2, iy2, iarea
     # variables for computing overlap with box j (lower scoring box)
-    xx1, yy1, xx2, yy2
-    w, h
-    inter, ovr
+    #xx1, yy1, xx2, yy2
+    #w, h
+    #inter, ovr
 
-    with nogil:
-      for _i in range(ndets):
-          i = order[_i]
-          if suppressed[i] == 1:
+    for ii in range(ndets):
+      i = order[ii]
+      if suppressed[i] == 1:
+          continue
+      ix1 = x1[i]
+      iy1 = y1[i]
+      ix2 = x2[i]
+      iy2 = y2[i]
+      iarea = areas[i]
+      for jj in range(ii + 1, ndets):
+          j = order[jj]
+          if suppressed[j] == 1:
               continue
-          ix1 = x1[i]
-          iy1 = y1[i]
-          ix2 = x2[i]
-          iy2 = y2[i]
-          iarea = areas[i]
-          for _j in range(_i + 1, ndets):
-              j = order[_j]
-              if suppressed[j] == 1:
-                  continue
-              xx1 = max(ix1, x1[j])
-              yy1 = max(iy1, y1[j])
-              xx2 = min(ix2, x2[j])
-              yy2 = min(iy2, y2[j])
-              w = max(0.0, xx2 - xx1 + 1)
-              h = max(0.0, yy2 - yy1 + 1)
-              inter = w * h
-              ovr = inter / (iarea + areas[j] - inter)
-              if ovr >= thresh:
-                  suppressed[j] = 1
+          xx1 = max(ix1, x1[j])
+          yy1 = max(iy1, y1[j])
+          xx2 = min(ix2, x2[j])
+          yy2 = min(iy2, y2[j])
+          w = max(0.0, xx2 - xx1 + 1)
+          h = max(0.0, yy2 - yy1 + 1)
+          inter = w * h
+          ovr = inter / (iarea + areas[j] - inter)
+          if ovr >= thresh:
+              suppressed[j] = 1
 
     return np.where(suppressed == 0)[0]

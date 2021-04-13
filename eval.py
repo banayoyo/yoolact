@@ -567,8 +567,25 @@ def badhash(x):
 
 def evalimage(net:Yolact, path:str, save_path:str=None):
     frame = torch.from_numpy(cv2.imread(path)).cpu().float()
+    #reshape
     batch = FastBaseTransform()(frame.unsqueeze(0))
     preds = net(batch)
+    #preds
+    #ipdb> preds[0]['box'].shape
+    #torch.Size([100, 4])
+    #
+    #ipdb> preds[0]['mask'].shape
+    #torch.Size([100, 32])
+    #
+    #ipdb> preds[0]['class'].shape
+    #torch.Size([100])
+    #
+    #ipdb> preds[0]['score'].shape
+    #torch.Size([100])
+    #
+    #ipdb> preds[0]['proto'].shape
+    #torch.Size([138, 138, 32])
+
 
     img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
     
@@ -773,11 +790,12 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             evalvideo(net, args.video)
         return
 
+    print('Others... \n')
+
     frame_times = MovingAverage()
     dataset_size = len(dataset) if args.max_images < 0 else min(args.max_images, len(dataset))
     progress_bar = ProgressBar(30, dataset_size)
 
-    print()
 
     if not args.display and not args.benchmark:
         # For each class and iou, stores tuples (score, isPositive)
@@ -977,15 +995,17 @@ if __name__ == '__main__':
 
 
 ########## key process
-        print('Loading model...', end='')
+        print('Loading model...\n', end='')
         net = Yolact()
+        print('Loading weight...\n')
         net.load_weights(args.trained_model)
+        #not know why add this
         net.eval()
-        print('\nnet Done.')
+        print('Net Done... \n')
 
         if args.cuda:
             net = net.cuda()
 
         evaluate(net, dataset)
-        print('\nYolact Done.')
+        print('Eval Done...\n')
 

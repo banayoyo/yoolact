@@ -599,7 +599,7 @@ class FastBaseTransform(torch.nn.Module):
     Maintain this as necessary.
     """
 
-    def __init__(self):
+    def __init__(self): 
         super().__init__()
 
         self.mean = torch.Tensor(MEANS).float()[None, :, None, None]
@@ -607,6 +607,7 @@ class FastBaseTransform(torch.nn.Module):
         self.transform = cfg.backbone.transform
 
     def forward(self, img):
+        #tensor可以通过使用 .to 方法移动到任何设备上
         self.mean = self.mean.to(img.device)
         self.std  = self.std.to(img.device)
         
@@ -615,6 +616,7 @@ class FastBaseTransform(torch.nn.Module):
             raise NotImplementedError
 
         img = img.permute(0, 3, 1, 2).contiguous()
+        #torch.nn.functional.interpolate
         img = F.interpolate(img, (cfg.max_size, cfg.max_size), mode='bilinear', align_corners=False)
 
         if self.transform.normalize:

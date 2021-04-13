@@ -49,7 +49,7 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
 
     # im_w and im_h when it concerns bboxes. This is a workaround hack for preserve_aspect_ratio
     b_w, b_h = (w, h)
-
+    #False
     # Undo the padding introduced with preserve_aspect_ratio
     if cfg.preserve_aspect_ratio:
         r_w, r_h = Resize.faster_rcnn_scale(w, h, cfg.min_size, cfg.max_size)
@@ -58,7 +58,8 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
         boxes = dets['box']
         boxes = center_size(boxes)
         s_w, s_h = (r_w/cfg.max_size, r_h/cfg.max_size)
-        
+
+        # TODO :: why this
         not_outside = ((boxes[:, 0] > s_w) + (boxes[:, 1] > s_h)) < 1 # not (a or b)
         for k in dets:
             if k != 'proto':
@@ -71,37 +72,50 @@ def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
     classes = dets['class']
     boxes   = dets['box']
     scores  = dets['score']
-    masks   = dets['mask']
+    masks0   = dets['mask']
 
     if cfg.mask_type == mask_type.lincomb and cfg.eval_mask_branch:
         # At this points masks is only the coefficients
         proto_data = dets['proto']
-        
+        #False
         # Test flag, do not upvote
         if cfg.mask_proto_debug:
             np.save('scripts/proto.npy', proto_data.cpu().numpy())
-        
+        #False
         if visualize_lincomb:
-            display_lincomb(proto_data, masks)
-
-        masks = torch.matmul(proto_data, masks.t())
-        masks = cfg.mask_proto_mask_activation(masks)
+            display_lincomb(proto_data, masks0)
+        # matmul = X multiply
+        #torch.Size([138, 138, 32]) x torch.Size([16, 32])^T = torch.Size([138, 138, 16])
+        masks0 = torch.matmul(proto_data, masks0.t())
+        masks0 = cfg.mask_proto_mask_activation(masks0)
 
         # Crop masks before upsampling because you know why
         if crop_masks:
-            masks = crop(masks, boxes)
+            #ipdb> masks.shape(h,w,n)
+            #torch.Size([138, 138, 16])
+            #
+            #ipdb> boxes.shape
+            #torch.Size([16, 4])
+            masks = crop(masks0, boxes)
+        else:
+            masks = masks0
 
         # Permute into the correct output shape [num_dets, proto_h, proto_w]
+        # permute=reshape
         masks = masks.permute(2, 0, 1).contiguous()
 
         # Scale masks up to the full image
+        #False
         if cfg.preserve_aspect_ratio:
             # Undo padding
             masks = masks[:, :int(r_h/cfg.max_size*proto_data.size(1)), :int(r_w/cfg.max_size*proto_data.size(2))]
-        
-        masks = F.interpolate(masks.unsqueeze(0), (h, w), mode=interpolation_mode, align_corners=False).squeeze(0)
+        #h=562,w=1000
+        hh = h
+        ww = w
+        masks = F.interpolate(masks.unsqueeze(0), (hh, ww), mode=interpolation_mode, align_corners=False).squeeze(0)
 
         # Binarize the masks
+        #gt = great than (>)
         masks.gt_(0.5)
 
     
